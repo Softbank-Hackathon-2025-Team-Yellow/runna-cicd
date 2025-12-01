@@ -1,0 +1,48 @@
+# Development Environment Configuration
+# Uses standard Deployment (no Argo Rollouts)
+# Minimal resources for cost efficiency
+
+service:
+  name: backend
+  type: ClusterIP
+  port: 8000
+
+image:
+  repository: 123456789.dkr.ecr.us-east-1.amazonaws.com/backend
+  tag: latest  # Will be updated by GitHub Actions
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+  hosts:
+    - host: api-dev.serverless.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: backend-dev-tls
+      hosts:
+        - api-dev.serverless.example.com
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+rollout:
+  enabled: false  # Dev uses standard Deployment
+  strategy: canary

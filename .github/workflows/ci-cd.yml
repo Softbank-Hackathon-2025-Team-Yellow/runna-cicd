@@ -1,0 +1,392 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/**'
+      - '.github/workflows/**'
+      - 'helm/**'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 123456789.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    
+    strategy:
+      matrix:
+        service: [backend]
+        # 나중에 확장: service: [frontend, backend, worker]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # 5.1: 이미지 태그 생성 로직 구현
+      - name: Generate image tag
+        id: image-tag
+        run: |
+          IMAGE_TAG="${GITHUB_SHA:0:15}"
+          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Generated image tag: ${IMAGE_TAG}"
+      
+      # AWS OIDC 인증 설정
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      # ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      # Docker 이미지 빌드
+      - name: Build Docker image
+        id: build-image
+        run: |
+          echo "::group::Building Docker image for ${{ matrix.service }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Service: ${{ matrix.service }}"
+          echo "Image Tag: ${{ steps.image-tag.outputs.tag }}"
+          echo "Git Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "::endgroup::"
+          
+          cd services/${{ matrix.service }}
+          
+          if docker build -t ${{ env.ECR_REGISTRY }}/${{ matrix.service }}:${{ steps.image-tag.outputs.tag }} . 2>&1 | tee build.log; then
+            echo "::notice::Successfully built image: ${{ env.ECR_REGISTRY }}/${{ matrix.service }}:${{ steps.image-tag.outputs.tag }}"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            BUILD_EXIT_CODE=$?
+            echo "::group::Build Error Details"
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "Error Type: DockerBuildError"
+            echo "Service: ${{ matrix.service }}"
+            echo "Exit Code: $BUILD_EXIT_CODE"
+            echo "Git Commit: ${{ github.sha }}"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "::endgroup::"
+            
+            echo "::error::Docker build failed for ${{ matrix.service }} with exit code $BUILD_EXIT_CODE"
+            
+            if [ -f build.log ]; then
+              echo "::group::Build Log (last 50 lines)"
+              tail -n 50 build.log
+              echo "::endgroup::"
+            fi
+            
+            exit $BUILD_EXIT_CODE
+          fi
+      
+      # ECR 푸시 (재시도 로직 포함)
+      - name: Push to Amazon ECR
+        id: push-ecr
+        run: |
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          
+          echo "::group::Pushing image to Amazon ECR"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Service: ${{ matrix.service }}"
+          echo "Image: ${{ env.ECR_REGISTRY }}/${{ matrix.service }}:${{ steps.image-tag.outputs.tag }}"
+          echo "Max Retries: $MAX_RETRIES"
+          echo "::endgroup::"
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "::group::Push attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "::endgroup::"
+            
+            if docker push ${{ env.ECR_REGISTRY }}/${{ matrix.service }}:${{ steps.image-tag.outputs.tag }} 2>&1 | tee push.log; then
+              echo "::notice::Successfully pushed image to ECR on attempt $((RETRY_COUNT + 1))"
+              echo "image-url=${{ env.ECR_REGISTRY }}/${{ matrix.service }}:${{ steps.image-tag.outputs.tag }}" >> $GITHUB_OUTPUT
+              echo "success=true" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              PUSH_EXIT_CODE=$?
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              
+              echo "::group::Push Error Details (Attempt $RETRY_COUNT)"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "Error Type: ECRPushError"
+              echo "Service: ${{ matrix.service }}"
+              echo "Exit Code: $PUSH_EXIT_CODE"
+              echo "Retry Count: $RETRY_COUNT of $MAX_RETRIES"
+              echo "::endgroup::"
+              
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "::warning::Push failed with exit code $PUSH_EXIT_CODE. Retrying in 5 seconds..."
+                sleep 5
+              else
+                echo "::group::Final Push Error Log"
+                if [ -f push.log ]; then
+                  tail -n 50 push.log
+                fi
+                echo "::endgroup::"
+                
+                echo "::error::Failed to push image to ECR after $MAX_RETRIES attempts"
+                echo "::error::Last exit code: $PUSH_EXIT_CODE"
+                echo "::error::Possible causes: Network timeout, authentication failure, insufficient permissions, or ECR repository not found"
+                exit 1
+              fi
+            fi
+          done
+      
+      # yq 설치
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+      
+      # 5.3: Helm values 업데이트 로직 구현
+      - name: Update Helm values for dev environment
+        id: update-dev
+        run: |
+          VALUES_FILE="helm/values/values-${{ matrix.service }}-dev.yaml"
+          
+          echo "::group::Updating Helm values for dev environment"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "File: $VALUES_FILE"
+          echo "New Tag: ${{ steps.image-tag.outputs.tag }}"
+          echo "::endgroup::"
+          
+          if [ -f "$VALUES_FILE" ]; then
+            if yq eval ".image.tag = \"${{ steps.image-tag.outputs.tag }}\"" -i "$VALUES_FILE" 2>&1 | tee update.log; then
+              echo "::notice::Successfully updated $VALUES_FILE with tag: ${{ steps.image-tag.outputs.tag }}"
+              echo "success=true" >> $GITHUB_OUTPUT
+            else
+              UPDATE_EXIT_CODE=$?
+              echo "::group::Helm Values Update Error"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "Error Type: HelmValuesUpdateError"
+              echo "File: $VALUES_FILE"
+              echo "Exit Code: $UPDATE_EXIT_CODE"
+              echo "::endgroup::"
+              
+              echo "::error::Failed to update $VALUES_FILE with exit code $UPDATE_EXIT_CODE"
+              exit $UPDATE_EXIT_CODE
+            fi
+          else
+            echo "::warning::$VALUES_FILE not found, skipping dev environment update"
+          fi
+      
+      - name: Update Helm values for staging environment
+        id: update-staging
+        run: |
+          VALUES_FILE="helm/values/values-${{ matrix.service }}-staging.yaml"
+          
+          echo "::group::Updating Helm values for staging environment"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "File: $VALUES_FILE"
+          echo "New Tag: ${{ steps.image-tag.outputs.tag }}"
+          echo "::endgroup::"
+          
+          if [ -f "$VALUES_FILE" ]; then
+            if yq eval ".image.tag = \"${{ steps.image-tag.outputs.tag }}\"" -i "$VALUES_FILE" 2>&1 | tee update.log; then
+              echo "::notice::Successfully updated $VALUES_FILE with tag: ${{ steps.image-tag.outputs.tag }}"
+              echo "success=true" >> $GITHUB_OUTPUT
+            else
+              UPDATE_EXIT_CODE=$?
+              echo "::group::Helm Values Update Error"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "Error Type: HelmValuesUpdateError"
+              echo "File: $VALUES_FILE"
+              echo "Exit Code: $UPDATE_EXIT_CODE"
+              echo "::endgroup::"
+              
+              echo "::error::Failed to update $VALUES_FILE with exit code $UPDATE_EXIT_CODE"
+              exit $UPDATE_EXIT_CODE
+            fi
+          else
+            echo "::warning::$VALUES_FILE not found, skipping staging environment update"
+          fi
+      
+      - name: Update Helm values for prod environment
+        id: update-prod
+        run: |
+          VALUES_FILE="helm/values/values-${{ matrix.service }}-prod.yaml"
+          
+          echo "::group::Updating Helm values for prod environment"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "File: $VALUES_FILE"
+          echo "New Tag: ${{ steps.image-tag.outputs.tag }}"
+          echo "::endgroup::"
+          
+          if [ -f "$VALUES_FILE" ]; then
+            if yq eval ".image.tag = \"${{ steps.image-tag.outputs.tag }}\"" -i "$VALUES_FILE" 2>&1 | tee update.log; then
+              echo "::notice::Successfully updated $VALUES_FILE with tag: ${{ steps.image-tag.outputs.tag }}"
+              echo "success=true" >> $GITHUB_OUTPUT
+            else
+              UPDATE_EXIT_CODE=$?
+              echo "::group::Helm Values Update Error"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "Error Type: HelmValuesUpdateError"
+              echo "File: $VALUES_FILE"
+              echo "Exit Code: $UPDATE_EXIT_CODE"
+              echo "::endgroup::"
+              
+              echo "::error::Failed to update $VALUES_FILE with exit code $UPDATE_EXIT_CODE"
+              exit $UPDATE_EXIT_CODE
+            fi
+          else
+            echo "::warning::$VALUES_FILE not found, skipping prod environment update"
+          fi
+      
+      # Git 설정 및 커밋
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+      
+      # Git 커밋 및 푸시
+      - name: Commit and push Helm values changes
+        id: git-push
+        run: |
+          echo "::group::Preparing Git commit"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Service: ${{ matrix.service }}"
+          echo "Image Tag: ${{ steps.image-tag.outputs.tag }}"
+          echo "::endgroup::"
+          
+          git add helm/values/values-${{ matrix.service }}-*.yaml
+          
+          if git diff --staged --quiet; then
+            echo "::notice::No changes to commit"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            if git commit -m "chore: update ${{ matrix.service }} image tag to ${{ steps.image-tag.outputs.tag }}" 2>&1 | tee commit.log; then
+              echo "::notice::Successfully created commit"
+            else
+              COMMIT_EXIT_CODE=$?
+              echo "::group::Git Commit Error"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "Error Type: GitCommitError"
+              echo "Exit Code: $COMMIT_EXIT_CODE"
+              echo "::endgroup::"
+              
+              echo "::error::Failed to create git commit with exit code $COMMIT_EXIT_CODE"
+              exit $COMMIT_EXIT_CODE
+            fi
+            
+            # Pull latest changes to avoid conflicts
+            echo "::group::Pulling latest changes"
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "::endgroup::"
+            
+            if ! git pull --rebase origin ${{ github.ref_name }} 2>&1 | tee pull.log; then
+              PULL_EXIT_CODE=$?
+              echo "::group::Git Pull Error"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "Error Type: GitPullError"
+              echo "Exit Code: $PULL_EXIT_CODE"
+              echo "::endgroup::"
+              
+              echo "::error::Failed to pull latest changes with exit code $PULL_EXIT_CODE"
+              echo "::error::There may be merge conflicts that need manual resolution"
+              exit $PULL_EXIT_CODE
+            fi
+            
+            # Push with retry logic
+            MAX_RETRIES=3
+            RETRY_COUNT=0
+            
+            echo "::group::Pushing changes to repository"
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "Max Retries: $MAX_RETRIES"
+            echo "::endgroup::"
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              echo "::group::Push attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "::endgroup::"
+              
+              if git push origin ${{ github.ref_name }} 2>&1 | tee push.log; then
+                echo "::notice::Successfully pushed changes to repository on attempt $((RETRY_COUNT + 1))"
+                echo "success=true" >> $GITHUB_OUTPUT
+                exit 0
+              else
+                PUSH_EXIT_CODE=$?
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                
+                echo "::group::Git Push Error (Attempt $RETRY_COUNT)"
+                echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                echo "Error Type: GitPushError"
+                echo "Exit Code: $PUSH_EXIT_CODE"
+                echo "Retry Count: $RETRY_COUNT of $MAX_RETRIES"
+                echo "::endgroup::"
+                
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                  echo "::warning::Push failed with exit code $PUSH_EXIT_CODE. Retrying in 2 seconds..."
+                  git pull --rebase origin ${{ github.ref_name }}
+                  sleep 2
+                else
+                  echo "::group::Final Git Push Error Log"
+                  if [ -f push.log ]; then
+                    tail -n 50 push.log
+                  fi
+                  echo "::endgroup::"
+                  
+                  echo "::error::Failed to push changes to repository after $MAX_RETRIES attempts"
+                  echo "::error::Last exit code: $PUSH_EXIT_CODE"
+                  echo "::error::Possible causes: Permission denied, branch protection rules, or network issues"
+                  exit 1
+                fi
+              fi
+            done
+          fi
+      
+      # 빌드 성공 로그
+      - name: Build summary
+        if: success()
+        run: |
+          echo "::group::✅ Build and Deployment Summary"
+          echo "Status: SUCCESS"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Service: ${{ matrix.service }}"
+          echo "Image Tag: ${{ steps.image-tag.outputs.tag }}"
+          echo "Image URL: ${{ steps.push-ecr.outputs.image-url }}"
+          echo "Git Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Workflow Run: ${{ github.run_id }}"
+          echo "::endgroup::"
+          
+          echo "::notice::✅ Successfully built and deployed ${{ matrix.service }} with tag ${{ steps.image-tag.outputs.tag }}"
+      
+      # 빌드 실패 로그
+      - name: Build failure summary
+        if: failure()
+        run: |
+          echo "::group::❌ Build and Deployment Failure Summary"
+          echo "Status: FAILED"
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Service: ${{ matrix.service }}"
+          echo "Git Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Workflow Run: ${{ github.run_id }}"
+          echo "::endgroup::"
+          
+          echo "::group::Failure Analysis"
+          echo "Build Image Success: ${{ steps.build-image.outputs.success || 'false' }}"
+          echo "ECR Push Success: ${{ steps.push-ecr.outputs.success || 'false' }}"
+          echo "Helm Update Dev Success: ${{ steps.update-dev.outputs.success || 'false' }}"
+          echo "Helm Update Staging Success: ${{ steps.update-staging.outputs.success || 'false' }}"
+          echo "Helm Update Prod Success: ${{ steps.update-prod.outputs.success || 'false' }}"
+          echo "Git Push Success: ${{ steps.git-push.outputs.success || 'false' }}"
+          echo "::endgroup::"
+          
+          echo "::error::❌ Build or deployment failed for ${{ matrix.service }}"
+          echo "::error::Please check the detailed error logs above for specific failure information"
+          echo "::error::Common issues: Docker build errors, ECR authentication failures, network timeouts, or git conflicts"

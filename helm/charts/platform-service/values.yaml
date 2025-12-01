@@ -1,0 +1,40 @@
+service:
+  name: backend
+  type: ClusterIP
+  port: 8000
+
+image:
+  repository: 123456789.dkr.ecr.us-east-1.amazonaws.com/backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+rollout:
+  enabled: false
+  strategy: canary

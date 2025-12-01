@@ -1,0 +1,48 @@
+# Staging Environment Configuration
+# Uses Argo Rollouts with Canary deployment strategy
+# Progressive rollout: 20% → 50% → 80% → 100%
+
+service:
+  name: backend
+  type: ClusterIP
+  port: 8000
+
+image:
+  repository: 123456789.dkr.ecr.us-east-1.amazonaws.com/backend
+  tag: latest  # Will be updated by GitHub Actions
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+  hosts:
+    - host: api-staging.serverless.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: backend-staging-tls
+      hosts:
+        - api-staging.serverless.example.com
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+rollout:
+  enabled: true
+  strategy: canary  # Staging uses Canary deployment
