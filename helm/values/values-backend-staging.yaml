@@ -6,18 +6,14 @@ service:
   name: backend
   type: ClusterIP
   port: 8000
-
 image:
   repository: docker.io/ytjdud79/backend
-  tag: latest  # Will be updated by GitHub Actions
+  tag: 10a4be66cd9a153 # Will be updated by GitHub Actions
   pullPolicy: IfNotPresent
-
 # Docker Hub Private Repository??imagePullSecrets
 imagePullSecrets:
   - name: dockerhub-secret
-
 replicaCount: 2
-
 resources:
   limits:
     cpu: 1000m
@@ -25,7 +21,6 @@ resources:
   requests:
     cpu: 500m
     memory: 512Mi
-
 ingress:
   enabled: true
   className: nginx
@@ -40,17 +35,14 @@ ingress:
     - secretName: backend-staging-tls
       hosts:
         - api-staging.serverless.example.com
-
 autoscaling:
   enabled: true
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
-
 rollout:
   enabled: true
-  strategy: canary  # Staging uses Canary deployment
-
+  strategy: canary # Staging uses Canary deployment
 # Environment Variables
 env:
   # Database Configuration
@@ -59,7 +51,6 @@ env:
       secretKeyRef:
         name: backend-secrets
         key: database-url
-  
   # Redis Configuration
   - name: REDIS_HOST
     value: "redis-service"
@@ -73,13 +64,11 @@ env:
         name: backend-secrets
         key: redis-password
         optional: true
-  
   # Knative Configuration
   - name: KNATIVE_URL
     value: "http://knative-serving.knative-serving.svc.cluster.local"
   - name: KNATIVE_TIMEOUT
     value: "30"
-  
   # Security Configuration
   - name: SECRET_KEY
     valueFrom:
@@ -90,7 +79,6 @@ env:
     value: "HS256"
   - name: ACCESS_TOKEN_EXPIRE_MINUTES
     value: "30"
-  
   # Environment
   - name: ENVIRONMENT
     value: "staging"
