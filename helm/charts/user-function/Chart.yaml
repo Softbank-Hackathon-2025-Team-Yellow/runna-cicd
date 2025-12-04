@@ -1,0 +1,15 @@
+apiVersion: v2
+name: user-function
+description: Helm chart for user functions with Knative
+type: application
+version: 1.0.0
+appVersion: "1.0"
+
+keywords:
+  - serverless
+  - knative
+  - function
+
+maintainers:
+  - name: Runna Platform Team
+    email: team@runna.example.com

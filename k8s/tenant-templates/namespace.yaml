@@ -1,0 +1,17 @@
+# Tenant Namespace Template
+# 
+# 사용법:
+# 1. {USER_ID}를 실제 사용자 ID로 변경
+# 2. kubectl apply -f namespace.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-{USER_ID}
+  labels:
+    tenant: "{USER_ID}"
+    managed-by: "runna-platform"
+    # Pod Security Standards 적용
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

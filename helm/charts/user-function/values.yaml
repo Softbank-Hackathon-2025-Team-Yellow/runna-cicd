@@ -1,0 +1,70 @@
+# Default values for user-function chart
+
+# 함수 정보
+functionName: "user-function"
+functionId: ""
+namespace: "default"
+
+# Generic Runtime 이미지
+genericRuntimeImage:
+  repository: "123456789.dkr.ecr.ap-northeast-2.amazonaws.com/generic-runtime"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# 🔥 사용자 코드 (Base64 인코딩 또는 직접)
+userCode: ""
+
+# 🔥 정책: Knative 설정
+knative:
+  # 무한루프 방지
+  timeoutSeconds: 30
+  
+  # 동시 요청 제한
+  containerConcurrency: 10
+  
+  # Auto-scaling
+  autoscaling:
+    target: 10
+    minScale: 0
+    maxScale: 10
+    window: "60s"
+    scaleToZeroPodRetentionPeriod: "5m"
+
+# 🔥 정책: 리소스 제한
+resources:
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Health Check
+healthCheck:
+  enabled: true
+  path: "/health"
+  port: 8080
+  liveness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 2
+    successThreshold: 1
+    failureThreshold: 3
+
+# 환경변수
+env: []
+  # - name: CUSTOM_VAR
+  #   value: "value"
+
+# Labels
+labels:
+  app: "user-function"
+  managed-by: "runna-platform"
+
+# Annotations
+annotations: {}

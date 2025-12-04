@@ -1,0 +1,93 @@
+# Tenant NetworkPolicy Template
+# 
+# 테넌트 간 네트워크 격리
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-isolation
+  namespace: tenant-{USER_ID}
+spec:
+  podSelector: {}  # 네임스페이스 내 모든 Pod에 적용
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # Ingress: 들어오는 트래픽 규칙
+  ingress:
+    # 1. 같은 네임스페이스 내 Pod 간 통신 허용
+    - from:
+      - podSelector: {}
+    
+    # 2. Ingress Controller에서 들어오는 트래픽 허용
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: ingress-nginx
+    
+    # 3. 모니터링 시스템 접근 허용 (Prometheus)
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+  
+  # Egress: 나가는 트래픽 규칙
+  egress:
+    # 1. 같은 네임스페이스 내 Pod 간 통신 허용
+    - to:
+      - podSelector: {}
+    
+    # 2. DNS 조회 허용 (kube-dns)
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    
+    # 3. Backend API 접근 허용
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: platform-system
+      - podSelector:
+          matchLabels:
+            app: backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    
+    # 4. 외부 인터넷 접근 허용 (HTTPS/HTTP)
+    - to:
+      - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443  # HTTPS
+        - protocol: TCP
+          port: 80   # HTTP
+
+---
+# 추가: 다른 테넌트로의 접근 명시적 차단
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-other-tenants
+  namespace: tenant-{USER_ID}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # 다른 tenant-* 네임스페이스로의 접근 차단
+  egress:
+    - to:
+      - namespaceSelector:
+          matchExpressions:
+            - key: tenant
+              operator: DoesNotExist

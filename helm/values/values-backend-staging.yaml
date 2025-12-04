@@ -1,6 +1,6 @@
 # Staging Environment Configuration
 # Uses Argo Rollouts with Canary deployment strategy
-# Progressive rollout: 20% → 50% → 80% → 100%
+# Progressive rollout: 20% ??50% ??80% ??100%
 
 service:
   name: backend
@@ -8,9 +8,13 @@ service:
   port: 8000
 
 image:
-  repository: 123456789.dkr.ecr.us-east-1.amazonaws.com/backend
+  repository: docker.io/ytjdud79/backend
   tag: latest  # Will be updated by GitHub Actions
   pullPolicy: IfNotPresent
+
+# Docker Hub Private Repository??imagePullSecrets
+imagePullSecrets:
+  - name: dockerhub-secret
 
 replicaCount: 2
 
@@ -46,3 +50,49 @@ autoscaling:
 rollout:
   enabled: true
   strategy: canary  # Staging uses Canary deployment
+
+# Environment Variables
+env:
+  # Database Configuration
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: backend-secrets
+        key: database-url
+  
+  # Redis Configuration
+  - name: REDIS_HOST
+    value: "redis-service"
+  - name: REDIS_PORT
+    value: "6379"
+  - name: REDIS_DB
+    value: "0"
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: backend-secrets
+        key: redis-password
+        optional: true
+  
+  # Knative Configuration
+  - name: KNATIVE_URL
+    value: "http://knative-serving.knative-serving.svc.cluster.local"
+  - name: KNATIVE_TIMEOUT
+    value: "30"
+  
+  # Security Configuration
+  - name: SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: backend-secrets
+        key: secret-key
+  - name: ALGORITHM
+    value: "HS256"
+  - name: ACCESS_TOKEN_EXPIRE_MINUTES
+    value: "30"
+  
+  # Environment
+  - name: ENVIRONMENT
+    value: "staging"
+  - name: DEBUG
+    value: "false"

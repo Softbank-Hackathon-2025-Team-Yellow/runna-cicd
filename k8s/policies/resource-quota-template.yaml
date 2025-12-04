@@ -1,0 +1,64 @@
+# Function ResourceQuota Template
+# 
+# 함수별 Namespace의 리소스 사용량 제한
+# 1 function = 1 namespace 격리 모델
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: function-quota
+  # namespace는 동적으로 설정: {workspace}-{function_id}
+spec:
+  hard:
+    # CPU 제한 (함수별)
+    requests.cpu: "500m"      # 최소 보장 0.5 코어
+    limits.cpu: "1"           # 최대 1 코어
+    
+    # 메모리 제한 (함수별)
+    requests.memory: "256Mi"  # 최소 보장 256MB
+    limits.memory: "512Mi"    # 최대 512MB
+    
+    # Pod 개수 제한 (Knative 자동 스케일링)
+    pods: "10"                # 최대 10개 Pod (스케일 아웃)
+    
+    # 스토리지 제한
+    persistentvolumeclaims: "1"  # 함수별 PVC 1개만 허용
+    requests.storage: "1Gi"      # 최대 1GB 스토리지
+    
+    # Service 제한
+    services: "1"                # Knative Service 1개만
+    services.loadbalancers: "0"  # LoadBalancer 사용 금지
+    services.nodeports: "0"      # NodePort 사용 금지
+
+---
+# LimitRange: 개별 Container의 기본값 및 제한
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: function-limits
+  # namespace는 동적으로 설정: {workspace}-{function_id}
+spec:
+  limits:
+    # Container 기본값 (Generic Runner)
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "250m"
+        memory: "256Mi"
+      max:
+        cpu: "1"
+        memory: "512Mi"
+      min:
+        cpu: "100m"
+        memory: "128Mi"
+    
+    # Pod 제한
+    - type: Pod
+      max:
+        cpu: "1"
+        memory: "512Mi"
+      min:
+        cpu: "100m"
+        memory: "128Mi"

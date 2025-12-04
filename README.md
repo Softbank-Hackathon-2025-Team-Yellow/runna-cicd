@@ -1,31 +1,31 @@
-# 서버리스 플랫폼 CI/CD 파이프라인
+# Serverless Platform - CI/CD & GitOps
 
-서버리스 플랫폼의 CI/CD 및 GitOps 파이프라인입니다. GitHub Actions를 통한 자동 빌드, ArgoCD를 통한 GitOps 배포, Argo Rollouts를 통한 점진적 배포를 제공합니다.
+서버리스 플랫폼의 CI/CD 파이프라인 및 GitOps 배포 시스템
 
-## 📋 목차
+## 🏗️ 아키텍처
 
-- [개요](#개요)
-- [아키텍처](#아키텍처)
-- [기술 스택](#기술-스택)
-- [프로젝트 구조](#프로젝트-구조)
-- [시작하기](#시작하기)
-- [사용법](#사용법)
-- [배포 전략](#배포-전략)
-- [환경 설정](#환경-설정)
+```
+코드 푸시 (GitHub)
+  ↓
+GitHub Actions (CI)
+  ↓
+Docker 빌드 → ECR 푸시
+  ↓
+Helm values 업데이트 → Git 커밋
+  ↓
+ArgoCD 감지 (GitOps)
+  ↓
+K8s 배포 (Argo Rollouts)
+  ↓
+Canary/Blue-Green 배포
+```
 
-## 개요
+## 📁 프로젝트 구조
 
-본 시스템은 서버리스 플랫폼의 완전 자동화된 CI/CD 파이프라인을 제공합니다.
-
-### 주요 기능
-
-- ✅ **자동 빌드**: GitHub에 코드 푸시 시 자동으로 Docker 이미지 빌드
-- ✅ **GitOps 배포**: Git을 단일 진실 공급원으로 사용하는 선언적 배포
-- ✅ **점진적 배포**: Canary 및 Blue-Green 배포 전략 지원
-- ✅ **환경 분리**: dev, staging, production 환경별 독립 배포
-- ✅ **자동 롤백**: 배포 실패 시 자동으로 이전 버전으로 복구
-
-### 핵심 흐름
+```
+.
+├── .github/workflows/
+│   └── ci-cd.yml              # GitHub Actions CI/CD
 
 ```
 코드 푸시 → GitHub Actions 빌드 → ECR 푸시 
@@ -421,6 +421,66 @@ bash scripts/test-argocd-dryrun.sh
 - Sync 정책 및 자동화 설정
 
 자세한 내용은 `docs/argocd-dryrun-testing.md`를 참조하세요.
+
+## 멀티테넌시 (Phase 3)
+
+### 개요
+
+사용자별로 격리된 함수 실행 환경을 제공하는 멀티테넌트 아키텍처
+
+### 테넌트 격리 전략
+
+**Namespace 기반 격리:**
+```
+kubernetes-cluster/
+├── platform-system/          # 플랫폼 공통 서비스
+│   ├── backend-api
+│   ├── argocd
+│   └── monitoring
+│
+├── tenant-user001/           # 사용자 1의 네임스페이스
+│   ├── user-function-1
+│   ├── user-function-2
+│   └── resource-quota
+│
+└── tenant-user002/           # 사용자 2의 네임스페이스
+    └── user-function-1
+```
+
+### 테넌트 생성 플로우
+
+```
+사용자 회원가입
+  ↓
+Backend API: 사용자 생성
+  ↓
+Namespace 자동 생성 (tenant-{user_id})
+  ↓
+ResourceQuota 설정 (CPU/메모리/Pod 제한)
+  ↓
+NetworkPolicy 적용 (테넌트 간 격리)
+  ↓
+ServiceAccount & RBAC 설정
+  ↓
+테넌트 준비 완료
+```
+
+### 리소스 제한
+
+각 테넌트는 다음 리소스 제한을 가집니다:
+
+- **CPU**: 최소 2코어, 최대 4코어
+- **메모리**: 최소 4GB, 최대 8GB
+- **Pod 개수**: 최대 10개 함수
+- **스토리지**: 최대 10GB
+
+### 보안
+
+- **NetworkPolicy**: 테넌트 간 네트워크 격리
+- **RBAC**: 테넌트는 자신의 네임스페이스만 접근
+- **Pod Security Standards**: Restricted 정책 적용
+
+자세한 내용은 `docs/PHASE3-MULTITENANCY-DESIGN.md`를 참조하세요.
 
 ## 트러블슈팅
 

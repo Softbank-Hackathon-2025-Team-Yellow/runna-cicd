@@ -1,10 +1,10 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: backend-staging
+  name: backend-prod
   namespace: argocd
   labels:
-    environment: staging
+    environment: production
     service: backend
 spec:
   project: default
@@ -15,11 +15,11 @@ spec:
     path: helm/charts/platform-service
     helm:
       valueFiles:
-        - ../../values/values-backend-staging.yaml
+        - ../../values/values-backend-prod.yaml
   
   destination:
     server: https://kubernetes.default.svc
-    namespace: staging
+    namespace: production
   
   syncPolicy:
     automated:

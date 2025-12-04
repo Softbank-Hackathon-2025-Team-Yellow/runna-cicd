@@ -1,0 +1,124 @@
+# 🔒 보안 강화된 Knative Service
+# 정적 분석 정책 준수
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: {{ .Values.functionName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- range $key, $value := .Values.labels }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    function-id: {{ .Values.functionId | quote }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  template:
+    metadata:
+      annotations:
+        # 🔥 Auto-scaling 설정
+        autoscaling.knative.dev/target: {{ .Values.knative.autoscaling.target | quote }}
+        autoscaling.knative.dev/minScale: {{ .Values.knative.autoscaling.minScale | quote }}
+        autoscaling.knative.dev/maxScale: {{ .Values.knative.autoscaling.maxScale | quote }}
+        autoscaling.knative.dev/window: {{ .Values.knative.autoscaling.window | quote }}
+        autoscaling.knative.dev/scale-to-zero-pod-retention-period: {{ .Values.knative.autoscaling.scaleToZeroPodRetentionPeriod | quote }}
+        
+        # 메트릭
+        autoscaling.knative.dev/metric: "concurrency"
+        
+        # 정적 분석 정책 준수
+        security.runna.io/static-analysis: "enforced"
+        security.runna.io/policy-version: "1.0"
+      
+      labels:
+        {{- range $key, $value := .Values.labels }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        function-id: {{ .Values.functionId | quote }}
+    
+    spec:
+      # 🔥 정책: 무한루프 방지 (timeout)
+      timeoutSeconds: {{ .Values.knative.timeoutSeconds }}
+      
+      # 🔥 정책: 동시 요청 제한
+      containerConcurrency: {{ .Values.knative.containerConcurrency }}
+      
+      # 🎯 Node Selector: worker-run 노드에만 배포
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      
+      containers:
+      - name: user-function
+        image: "{{ .Values.genericRuntimeImage.repository }}:{{ .Values.genericRuntimeImage.tag }}"
+        imagePullPolicy: {{ .Values.genericRuntimeImage.pullPolicy }}
+        
+        ports:
+        - name: http1
+          containerPort: 8080
+          protocol: TCP
+        
+        env:
+        # 🔥 정책: 코드는 환경변수로 전달 (파일 X)
+        - name: CODE_CONTENT
+          value: {{ .Values.userCode | quote }}
+        
+        # 함수 정보
+        - name: FUNCTION_NAME
+          value: {{ .Values.functionName | quote }}
+        - name: FUNCTION_ID
+          value: {{ .Values.functionId | quote }}
+        
+        # 추가 환경변수
+        {{- range .Values.env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        
+        # 🔥 정책: 리소스 제한
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu | quote }}
+            memory: {{ .Values.resources.limits.memory | quote }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+            memory: {{ .Values.resources.requests.memory | quote }}
+        
+        {{- if .Values.healthCheck.enabled }}
+        # 🔥 정책: Health Check (필수)
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.healthCheck.port }}
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.healthCheck.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthCheck.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthCheck.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.healthCheck.liveness.failureThreshold }}
+        
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.healthCheck.port }}
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.healthCheck.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthCheck.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthCheck.readiness.timeoutSeconds }}
+          successThreshold: {{ .Values.healthCheck.readiness.successThreshold }}
+          failureThreshold: {{ .Values.healthCheck.readiness.failureThreshold }}
+        {{- end }}
+        
+        # 🔥 보안: Non-root 사용자
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL

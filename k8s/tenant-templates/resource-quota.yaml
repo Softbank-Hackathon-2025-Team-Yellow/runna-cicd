@@ -1,0 +1,60 @@
+# Tenant ResourceQuota Template
+# 
+# 각 테넌트의 리소스 사용량 제한
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+  namespace: tenant-{USER_ID}
+spec:
+  hard:
+    # CPU 제한
+    requests.cpu: "2"      # 최소 보장 2 코어
+    limits.cpu: "4"        # 최대 4 코어
+    
+    # 메모리 제한
+    requests.memory: "4Gi" # 최소 보장 4GB
+    limits.memory: "8Gi"   # 최대 8GB
+    
+    # Pod 개수 제한
+    pods: "10"             # 최대 10개 함수
+    
+    # 스토리지 제한
+    persistentvolumeclaims: "5"
+    requests.storage: "10Gi"
+    
+    # Service 제한
+    services: "10"
+    services.loadbalancers: "0"  # LoadBalancer 사용 금지
+    services.nodeports: "0"      # NodePort 사용 금지
+
+---
+# LimitRange: 개별 Pod의 기본값 및 제한
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-limits
+  namespace: tenant-{USER_ID}
+spec:
+  limits:
+    # Container 기본값
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+    
+    # Pod 제한
+    - type: Pod
+      max:
+        cpu: "2"
+        memory: "2Gi"

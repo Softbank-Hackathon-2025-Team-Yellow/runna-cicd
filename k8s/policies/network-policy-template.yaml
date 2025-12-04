@@ -1,0 +1,125 @@
+# Function NetworkPolicy Template
+# 
+# 함수별 Namespace의 네트워크 격리
+# 1 function = 1 namespace 격리 모델
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: function-isolation
+  # namespace는 동적으로 설정: {workspace}-{function_id}
+spec:
+  podSelector: {}  # 네임스페이스 내 모든 Pod에 적용
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # Ingress: 들어오는 트래픽 규칙
+  ingress:
+    # 1. 같은 Namespace 내 Pod 간 통신 허용
+    - from:
+      - podSelector: {}
+    
+    # 2. Knative Kourier Ingress에서 들어오는 트래픽 허용
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            serving.knative.dev/release: devel
+      ports:
+        - protocol: TCP
+          port: 8080  # Knative 표준 포트
+    
+    # 3. Knative Serving 시스템 컴포넌트 접근 허용
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: knative-serving
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8012  # Queue Proxy
+        - protocol: TCP
+          port: 8022  # Queue Proxy Metrics
+        - protocol: TCP
+          port: 9090  # User Container Metrics
+        - protocol: TCP
+          port: 9091  # Queue Proxy Metrics
+  
+  # Egress: 나가는 트래픽 규칙
+  egress:
+    # 1. 같은 Namespace 내 Pod 간 통신 허용
+    - to:
+      - podSelector: {}
+    
+    # 2. DNS 조회 허용 (CoreDNS in kube-system)
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    
+    # 3. Redis Queue 접근 허용 (default namespace)
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: default
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    
+    # 4. Knative Serving 시스템 접근 허용
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: knative-serving
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    
+    # 5. 외부 인터넷 접근 허용 (HTTPS/HTTP)
+    # 함수가 외부 API를 호출할 수 있도록 허용
+    - to:
+      - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443  # HTTPS
+        - protocol: TCP
+          port: 80   # HTTP
+
+---
+# 추가: 다른 함수 Namespace로의 직접 접근 차단
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-function-access
+  # namespace는 동적으로 설정: {workspace}-{function_id}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  
+  # 다른 함수 Namespace로의 직접 접근 차단
+  # managed-by=runna-platform 레이블을 가진 다른 Namespace 차단
+  egress:
+    - to:
+      - namespaceSelector:
+          matchExpressions:
+            - key: managed-by
+              operator: In
+              values:
+                - runna-platform
+            - key: function-id
+              operator: Exists
+      # 명시적으로 차단 (빈 포트 리스트)
+      ports: []

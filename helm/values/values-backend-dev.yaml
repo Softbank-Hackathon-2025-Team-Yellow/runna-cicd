@@ -8,9 +8,13 @@ service:
   port: 8000
 
 image:
-  repository: 123456789.dkr.ecr.us-east-1.amazonaws.com/backend
+  repository: docker.io/ytjdud79/backend
   tag: latest  # Will be updated by GitHub Actions
   pullPolicy: IfNotPresent
+
+# Docker Hub Private Repository??imagePullSecrets
+imagePullSecrets:
+  - name: dockerhub-secret
 
 replicaCount: 1
 
@@ -24,18 +28,29 @@ resources:
 
 ingress:
   enabled: true
-  className: nginx
+  className: alb  # AWS ALB Ingress Controller
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-staging
+    # ALB ?§Ï†ï
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+    # TLS ?§Ï†ï
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN  # TODO: ?åÌòÑ?òÍªò Î∞õÍ∏∞
   hosts:
-    - host: api-dev.serverless.example.com
+    - host: api-dev.runna.dev  # TODO: ?§Ï†ú ?ÑÎ©î?∏ÏúºÎ°?Î≥ÄÍ≤?
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: backend-dev-tls
       hosts:
-        - api-dev.serverless.example.com
+        - api-dev.runna.dev
 
 autoscaling:
   enabled: false
@@ -46,3 +61,59 @@ autoscaling:
 rollout:
   enabled: false  # Dev uses standard Deployment
   strategy: canary
+
+# Environment Variables
+env:
+  # Database Configuration
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: backend-secrets
+        key: database-url
+  
+  # Redis Configuration
+  - name: REDIS_HOST
+    value: "redis-service"
+  - name: REDIS_PORT
+    value: "6379"
+  - name: REDIS_DB
+    value: "0"
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: backend-secrets
+        key: redis-password
+        optional: true
+  
+  # Knative Configuration
+  - name: KNATIVE_URL
+    value: "http://knative-serving.knative-serving.svc.cluster.local"
+  - name: KNATIVE_TIMEOUT
+    value: "30"
+  
+  # Security Configuration
+  - name: SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: backend-secrets
+        key: secret-key
+  - name: ALGORITHM
+    value: "HS256"
+  - name: ACCESS_TOKEN_EXPIRE_MINUTES
+    value: "30"
+  
+  # Environment
+  - name: ENVIRONMENT
+    value: "development"
+  - name: DEBUG
+    value: "true"
+  
+  # AWS Configuration
+  - name: AWS_REGION
+    value: "REPLACE_WITH_REGION"  # TODO: ?åÌòÑ?òÍªò Î¶¨Ï†Ñ Î∞õÍ∏∞
+  - name: S3_FUNCTIONS_BUCKET
+    value: "runna-functions"  # TODO: ?§Ï†ú Î≤ÑÌÇ∑ ?¥Î¶Ñ ?ïÏù∏
+  
+  # K8s Configuration
+  - name: K8S_NAMESPACE_PREFIX
+    value: "tenant-"
