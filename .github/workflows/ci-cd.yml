@@ -36,7 +36,7 @@ jobs:
         with:
           repository: Softbank-Hackathon-2025-Team-Yellow/runna-backend
           path: backend-repo
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
           ref: main
       
       # 5.1: 이미지 태그 생성 로직 구현
