@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, develop]
     paths:
+      - 'backend-repo/**'
       - 'services/**'
       - '.github/workflows/**'
       - 'helm/**'
