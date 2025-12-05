@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: backend-dev
-  namespace: argocd
+  namespace: observability
   labels:
     environment: dev
     service: backend
@@ -38,4 +38,4 @@ spec:
     - group: apps
       kind: Deployment
       jsonPointers:
-        - /spec/replicas  # HPA가 관리하는 경우 무시
+        - /spec/replicas  # HPA가 관리하??경우 무시

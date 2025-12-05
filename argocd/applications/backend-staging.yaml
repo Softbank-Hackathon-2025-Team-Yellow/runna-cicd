@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: backend-staging
-  namespace: argocd
+  namespace: observability
   labels:
     environment: staging
     service: backend
@@ -38,4 +38,4 @@ spec:
     - group: argoproj.io
       kind: Rollout
       jsonPointers:
-        - /spec/replicas  # HPA가 관리하는 경우 무시
+        - /spec/replicas  # HPA가 관리하??경우 무시
