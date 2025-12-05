@@ -8,7 +8,7 @@ service:
   port: 8000
 image:
   repository: docker.io/ytjdud79/backend
-  tag: 828c6bd3d429aec # Will be updated by GitHub Actions
+  tag: f27442c270427e1 # Will be updated by GitHub Actions
   pullPolicy: IfNotPresent
 # Docker Hub Private Repository imagePullSecrets
 imagePullSecrets:
