@@ -12,7 +12,7 @@ image:
   tag: latest  # Will be updated by GitHub Actions
   pullPolicy: IfNotPresent
 
-# Docker Hub Private Repository??imagePullSecrets
+# Docker Hub Private Repository imagePullSecrets
 imagePullSecrets:
   - name: dockerhub-secret
 
@@ -30,7 +30,7 @@ ingress:
   enabled: true
   className: alb  # AWS ALB Ingress Controller
   annotations:
-    # ALB ?§Ï†ï
+    # ALB Configuration
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /health
@@ -38,12 +38,12 @@ ingress:
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
     alb.ingress.kubernetes.io/healthy-threshold-count: '2'
     alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
-    # TLS ?§Ï†ï
+    # TLS Configuration
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN  # TODO: ?åÌòÑ?òÍªò Î∞õÍ∏∞
+    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN  # TODO: Get from Sohyun
   hosts:
-    - host: api-dev.runna.dev  # TODO: ?§Ï†ú ?ÑÎ©î?∏ÏúºÎ°?Î≥ÄÍ≤?
+    - host: api-dev.runna.dev  # TODO: Change to actual domain
       paths:
         - path: /
           pathType: Prefix
@@ -110,9 +110,9 @@ env:
   
   # AWS Configuration
   - name: AWS_REGION
-    value: "REPLACE_WITH_REGION"  # TODO: ?åÌòÑ?òÍªò Î¶¨Ï†Ñ Î∞õÍ∏∞
+    value: "REPLACE_WITH_REGION"  # TODO: Get region from Sohyun
   - name: S3_FUNCTIONS_BUCKET
-    value: "runna-functions"  # TODO: ?§Ï†ú Î≤ÑÌÇ∑ ?¥Î¶Ñ ?ïÏù∏
+    value: "runna-functions"  # TODO: Confirm actual bucket name
   
   # K8s Configuration
   - name: K8S_NAMESPACE_PREFIX
