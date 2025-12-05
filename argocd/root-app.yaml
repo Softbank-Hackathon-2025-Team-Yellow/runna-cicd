@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/team/serverless-platform
+    repoURL: https://github.com/Softbank-Hackathon-2025-Team-Yellow/runna-cicd
     targetRevision: main
     path: argocd/applications
   destination:
