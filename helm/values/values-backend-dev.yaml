@@ -6,18 +6,14 @@ service:
   name: backend
   type: ClusterIP
   port: 8000
-
 image:
   repository: docker.io/ytjdud79/backend
-  tag: latest  # Will be updated by GitHub Actions
+  tag: 828c6bd3d429aec # Will be updated by GitHub Actions
   pullPolicy: IfNotPresent
-
 # Docker Hub Private Repository imagePullSecrets
 imagePullSecrets:
   - name: dockerhub-secret
-
 replicaCount: 1
-
 resources:
   limits:
     cpu: 500m
@@ -25,10 +21,9 @@ resources:
   requests:
     cpu: 250m
     memory: 256Mi
-
 ingress:
   enabled: true
-  className: alb  # AWS ALB Ingress Controller
+  className: alb # AWS ALB Ingress Controller
   annotations:
     # ALB Configuration
     alb.ingress.kubernetes.io/scheme: internet-facing
@@ -41,9 +36,9 @@ ingress:
     # TLS Configuration
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN  # TODO: Get from Sohyun
+    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN # TODO: Get from Sohyun
   hosts:
-    - host: api-dev.runna.dev  # TODO: Change to actual domain
+    - host: api-dev.runna.dev # TODO: Change to actual domain
       paths:
         - path: /
           pathType: Prefix
@@ -51,17 +46,14 @@ ingress:
     - secretName: backend-dev-tls
       hosts:
         - api-dev.runna.dev
-
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 80
-
 rollout:
-  enabled: false  # Dev uses standard Deployment
+  enabled: false # Dev uses standard Deployment
   strategy: canary
-
 # Environment Variables
 env:
   # Database Configuration
@@ -70,7 +62,6 @@ env:
       secretKeyRef:
         name: backend-secrets
         key: database-url
-  
   # Redis Configuration
   - name: REDIS_HOST
     value: "redis-service"
@@ -84,13 +75,11 @@ env:
         name: backend-secrets
         key: redis-password
         optional: true
-  
   # Knative Configuration
   - name: KNATIVE_URL
     value: "http://knative-serving.knative-serving.svc.cluster.local"
   - name: KNATIVE_TIMEOUT
     value: "30"
-  
   # Security Configuration
   - name: SECRET_KEY
     valueFrom:
@@ -101,19 +90,16 @@ env:
     value: "HS256"
   - name: ACCESS_TOKEN_EXPIRE_MINUTES
     value: "30"
-  
   # Environment
   - name: ENVIRONMENT
     value: "development"
   - name: DEBUG
     value: "true"
-  
   # AWS Configuration
   - name: AWS_REGION
-    value: "REPLACE_WITH_REGION"  # TODO: Get region from Sohyun
+    value: "REPLACE_WITH_REGION" # TODO: Get region from Sohyun
   - name: S3_FUNCTIONS_BUCKET
-    value: "runna-functions"  # TODO: Confirm actual bucket name
-  
+    value: "runna-functions" # TODO: Confirm actual bucket name
   # K8s Configuration
   - name: K8S_NAMESPACE_PREFIX
     value: "tenant-"
