@@ -98,7 +98,18 @@
   - 모든 함수 생성 시 Namespace가 자동 생성되는지 테스트
   - _요구사항: 1.1_
 
-- [ ]* 3.2 속성 테스트: Namespace 생성 멱등성
+- [ ] 3.2 속성 테스트: Namespace 생성 멱등성
+
+
+
+
+
+
+
+
+
+
+
   - **속성 3: Namespace 생성 멱등성**
   - **검증: 요구사항 1.3**
   - 동일 함수 여러 번 생성 시 Namespace는 한 번만 생성되는지 테스트
@@ -137,7 +148,8 @@
   - 모든 Knative Service의 PVC가 readOnly=true인지 테스트
   - _요구사항: 5.5_
 
-- [ ] 5. Knative Service 배포 구현
+- [x] 5. Knative Service 배포 구현
+
   - deploy_knative_service() 함수 작성
   - Generic Runner 이미지 설정
   - 컨테이너 포트 8080 설정
@@ -179,7 +191,12 @@
   - 모든 공개 URL이 https://{workspace}.runna.haifu.cloud/{function} 형식인지 테스트
   - _요구사항: 6.2_
 
-- [ ] 7. Backend API 통합
+
+- [x] 7. Backend API 통합
+
+
+
+
   - POST /api/functions 엔드포인트 수정
   - TenantService.ensure_namespace() 호출
   - PVC에 코드 저장
@@ -187,6 +204,8 @@
   - IngressMapper.create_function_ingress() 호출
   - DB에 함수 정보 저장
   - _요구사항: 10.1_
+
+
 
 - [ ] 8. 함수 삭제 로직 구현
   - DELETE /api/functions/{id} 엔드포인트 수정
@@ -229,6 +248,7 @@
   - 구조화된 에러 로그 작성
   - 사용자 친화적 에러 메시지 반환
   - _요구사항: 11.1, 11.2, 11.3, 11.4, 11.5_
+
 
 - [ ] 12. Backend ServiceAccount RBAC 설정
   - ClusterRole 작성 (Namespace, ResourceQuota, NetworkPolicy, Knative Service, Ingress 권한)

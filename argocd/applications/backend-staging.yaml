@@ -10,7 +10,7 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/YOUR_ORG/YOUR_REPO  # TODO: 실제 저장소 URL로 변경
+    repoURL: https://github.com/Softbank-Hackathon-2025-Team-Yellow/runna-cicd
     targetRevision: main
     path: helm/charts/platform-service
     helm:
