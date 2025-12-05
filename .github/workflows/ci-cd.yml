@@ -30,7 +30,13 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: recursive
+      
+      - name: Checkout backend repository
+        uses: actions/checkout@v4
+        with:
+          repository: Softbank-Hackathon-2025-Team-Yellow/runna-backend
+          path: backend-repo
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       # 5.1: 이미지 태그 생성 로직 구현
       - name: Generate image tag
