@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backend
+  namespace: observability          # ✅ ArgoCD가 설치된 NS (중요!)
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Softbank-Hackathon-2025-Team-Yellow/manifests.git
+    targetRevision: main
+    path: .                          # deployment.yaml이 레포 루트니까 "."
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: development           # ✅ 실제 배포할 NS (여기선 development로 예시)
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
