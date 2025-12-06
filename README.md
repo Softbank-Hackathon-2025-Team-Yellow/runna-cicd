@@ -25,13 +25,587 @@ Canary/Blue-Green 배포
 ```
 .
 ├── .github/workflows/
-│   └── ci-cd.yml              # GitHub Actions CI/CD
+│   ├── ci-cd.yml              # GitHub Actions CI/CD (메인)
+│   └── temp.yml               # Backend CI/CD (Docker + Manifests 업데이트)
 ```
+
+## 🚀 백엔드 CI/CD 워크플로우 상세 가이드
+
+### 워크플로우 개요 (`temp.yml`)
+
+백엔드 서비스를 위한 완전 자동화된 CI/CD 파이프라인으로, Docker 이미지 빌드부터 Kubernetes 매니페스트 업데이트까지 처리합니다.
+
+### 트리거 조건
+
+워크플로우는 다음 조건에서 자동 실행됩니다:
+
+```yaml
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'services/backend/**'      # 백엔드 코드 변경 시
+      - '.github/workflows/**'      # 워크플로우 파일 변경 시
 ```
-코드 푸시 → GitHub Actions 빌드 → ECR 푸시 
-→ Helm values 업데이트 → Git 커밋 
-→ ArgoCD 감지 → K8s 배포 
-→ Argo Rollouts (20% → 50% → 80% → 100%)
+
+### 파이프라인 단계
+
+#### 1️⃣ 백엔드 코드 체크아웃
+
+```yaml
+- name: Checkout backend repo
+  uses: actions/checkout@v4
+  with:
+    repository: Softbank-Hackathon-2025-Team-Yellow/runna-backend
+    token: ${{ secrets.BACKEND_PAT }}
+    path: backend-repo
+```
+
+**동작:**
+- 별도의 백엔드 저장소에서 코드를 가져옵니다
+- `BACKEND_PAT`: 저장소 접근 권한이 있는 GitHub Classic Personal Access Token
+- `backend-repo` 폴더에 코드를 체크아웃합니다
+
+#### 2️⃣ Docker Hub 로그인
+
+```yaml
+- name: Login to Docker Hub
+  uses: docker/login-action@v3
+  with:
+    registry: docker.io
+    username: ${{ secrets.DOCKERHUB_USERNAME }}
+    password: ${{ secrets.DOCKERHUB_TOKEN }}
+```
+
+**동작:**
+- Docker Hub에 인증하여 이미지를 푸시할 수 있도록 준비합니다
+
+#### 3️⃣ 이미지 태그 생성
+
+```yaml
+- name: Set image tag from git SHA
+  run: |
+    IMAGE_TAG=${GITHUB_SHA::7}
+    echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+```
+
+**동작:**
+- Git 커밋 SHA의 앞 7자리를 이미지 태그로 사용합니다
+- 예: `abc1234` → `docker.io/username/backend:abc1234`
+- 각 빌드마다 고유한 태그를 보장하여 버전 추적이 가능합니다
+
+#### 4️⃣ Docker 이미지 빌드 및 푸시
+
+```yaml
+- name: Build and push Docker image
+  run: |
+    IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/backend
+    docker build -t $IMAGE_NAME:$IMAGE_TAG backend-repo
+    docker push $IMAGE_NAME:$IMAGE_TAG
+```
+
+**동작:**
+- 백엔드 코드를 기반으로 Docker 이미지를 빌드합니다
+- 생성된 이미지를 Docker Hub에 푸시합니다
+- 이미지 형식: `username/backend:abc1234`
+
+#### 5️⃣ Manifests 저장소 클론
+
+```yaml
+- name: Clone manifests repo
+  run: |
+    git clone "https://${{ secrets.CLASSIC_PAT }}@github.com/${{ secrets.MANIFESTS_REPO }}.git" manifests-repo
+```
+
+**동작:**
+- Kubernetes 매니페스트 파일이 있는 별도 저장소를 클론합니다
+- `MANIFESTS_REPO`: 매니페스트 저장소 경로 (예: `org/repo-name`)
+- GitOps 패턴을 위해 매니페스트와 애플리케이션 코드를 분리합니다
+
+#### 6️⃣ Deployment 매니페스트 업데이트
+
+```yaml
+- name: Update image tag in manifests
+  run: |
+    cd manifests-repo
+    sed -i "s|image: .*backend:.*|image: docker.io/${DOCKERHUB_USERNAME}/backend:${IMAGE_TAG}|g" deployment.yaml
+```
+
+**동작:**
+- `deployment.yaml` 파일에서 이미지 태그를 최신 버전으로 업데이트합니다
+- `sed` 명령어로 이미지 라인을 교체합니다
+- 변경 전/후 로그를 출력하여 확인 가능합니다
+
+#### 7️⃣ 변경사항 커밋 및 푸시
+
+```yaml
+- name: Commit and push manifests changes
+  run: |
+    cd manifests-repo
+    git config user.name "github-actions[bot]"
+    git config user.email "github-actions[bot]@users.noreply.github.com"
+    git add .
+    git commit -m "chore: update backend image to ${IMAGE_TAG}"
+    git push origin main
+```
+
+**동작:**
+- 업데이트된 매니페스트를 Git에 커밋합니다
+- `chore: update backend image to abc1234` 형식의 커밋 메시지 생성
+- main 브랜치에 푸시하여 ArgoCD가 감지할 수 있도록 합니다
+
+### 필수 GitHub Secrets 설정
+
+워크플로우가 작동하려면 다음 Secrets를 설정해야 합니다:
+
+| Secret 이름 | 설명 | 예시 |
+|------------|------|------|
+| `BACKEND_PAT` | 백엔드 저장소 접근용 Classic PAT | `ghp_xxxxxxxxxxxx` |
+| `DOCKERHUB_USERNAME` | Docker Hub 사용자 이름 | `myusername` |
+| `DOCKERHUB_TOKEN` | Docker Hub 액세스 토큰 | `dckr_pat_xxxx` |
+| `CLASSIC_PAT` | Manifests 저장소 푸시용 PAT | `ghp_xxxxxxxxxxxx` |
+| `MANIFESTS_REPO` | Manifests 저장소 경로 | `org/repo-name` |
+| `GIT_USER_NAME` | (선택) Git 커밋 사용자 이름 | `CI Bot` |
+| `GIT_USER_EMAIL` | (선택) Git 커밋 이메일 | `ci@example.com` |
+
+### Secrets 설정 방법
+
+1. GitHub 저장소 → **Settings** → **Secrets and variables** → **Actions**
+2. **New repository secret** 클릭
+3. 위 표의 각 Secret을 추가
+
+### 전체 워크플로우 흐름
+
+```
+코드 푸시 (main 브랜치)
+  ↓
+백엔드 저장소 체크아웃
+  ↓
+Docker Hub 로그인
+  ↓
+Git SHA로 이미지 태그 생성 (예: abc1234)
+  ↓
+Docker 이미지 빌드
+  ↓
+Docker Hub에 이미지 푸시 (username/backend:abc1234)
+  ↓
+Manifests 저장소 클론
+  ↓
+deployment.yaml 이미지 태그 업데이트
+  ↓
+변경사항 Git 커밋 및 푸시
+  ↓
+ArgoCD가 변경 감지 (GitOps)
+  ↓
+Kubernetes에 자동 배포
+  ↓
+Argo Rollouts로 점진적 배포 (Canary/Blue-Green)
+```
+
+### 워크플로우 실행 확인
+
+1. **GitHub Actions 페이지 접속**
+   ```
+   https://github.com/your-org/your-repo/actions
+   ```
+
+2. **워크플로우 실행 확인**
+   - "Backend CI/CD (Docker + Manifests Update)" 워크플로우 클릭
+   - 각 단계별 로그 확인 가능
+
+3. **Docker Hub에서 이미지 확인**
+   ```
+   https://hub.docker.com/r/your-username/backend/tags
+   ```
+
+4. **Manifests 저장소에서 커밋 확인**
+   - Manifests 저장소의 커밋 히스토리 확인
+   - `deployment.yaml` 파일의 이미지 태그가 업데이트되었는지 확인
+
+### 트러블슈팅
+
+#### ❌ 인증 실패
+
+**문제:** `Authentication failed` 또는 `Permission denied`
+
+**해결:**
+- GitHub Secrets가 올바르게 설정되었는지 확인
+- PAT(Personal Access Token)의 권한 확인:
+  - `repo` (전체 저장소 접근)
+  - `workflow` (워크플로우 수정)
+- Docker Hub Token이 유효한지 확인
+
+#### ❌ 이미지 빌드 실패
+
+**문제:** Docker build 중 오류 발생
+
+**해결:**
+```bash
+# 로컬에서 빌드 테스트
+cd backend-repo
+docker build -t test:local .
+```
+
+#### ❌ Manifests 업데이트 실패
+
+**문제:** `sed` 명령어가 이미지를 찾지 못함
+
+**해결:**
+- `deployment.yaml` 파일의 이미지 형식 확인:
+  ```yaml
+  # 올바른 형식
+  image: docker.io/username/backend:abc1234
+  ```
+- Manifests 저장소 경로가 올바른지 확인
+
+### 로컬 테스트
+
+워크플로우를 푸시하기 전에 로컬에서 테스트:
+
+```bash
+# 1. 백엔드 코드 체크아웃
+git clone https://github.com/Softbank-Hackathon-2025-Team-Yellow/runna-backend backend-repo
+
+# 2. Docker 이미지 빌드
+cd backend-repo
+docker build -t backend:test .
+
+# 3. 이미지 실행 테스트
+docker run -p 8080:8080 backend:test
+
+# 4. Manifests 업데이트 테스트
+cd ../manifests-repo
+sed -i "s|image: .*backend:.*|image: docker.io/username/backend:test|g" deployment.yaml
+git diff deployment.yaml
+```
+
+## 🔄 메인 CI/CD 파이프라인 상세 가이드 (`ci-cd.yml`)
+
+### 개요
+
+프로덕션급 완전 자동화 CI/CD 파이프라인으로, 고급 기능과 견고한 오류 처리를 포함합니다.
+
+### 주요 특징
+
+- ✅ **매트릭스 전략**: 여러 서비스 동시 빌드 지원
+- ✅ **재시도 로직**: Docker Hub 푸시 및 Git 푸시 재시도 (최대 3회)
+- ✅ **다중 환경 지원**: dev, staging, prod 환경별 Helm values 업데이트
+- ✅ **상세한 로깅**: 그룹화된 로그 및 타임스탬프 포함
+- ✅ **오류 분석**: 빌드 실패 시 상세한 실패 분석 제공
+
+### 워크플로우 비교
+
+| 기능 | temp.yml | ci-cd.yml |
+|------|----------|-----------|
+| **복잡도** | 기본 | 고급 |
+| **재시도 로직** | ❌ | ✅ (3회) |
+| **환경 지원** | 단일 | 다중 (dev/staging/prod) |
+| **매니페스트 업데이트** | `sed` (deployment.yaml) | `yq` (Helm values) |
+| **오류 처리** | 기본 | 상세 |
+| **로그 수준** | 기본 | 그룹화 + 타임스탬프 |
+| **Git SHA 길이** | 7자리 | 15자리 |
+
+### 트리거 조건
+
+```yaml
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend-repo/**'
+      - 'services/**'
+      - '.github/workflows/**'
+      - 'helm/**'
+```
+
+**차이점:**
+- `develop` 브랜치도 포함
+- 더 많은 경로 감지 (helm 디렉토리 포함)
+
+### 파이프라인 단계 상세
+
+#### 1️⃣ 이미지 태그 생성 (고급)
+
+```yaml
+- name: Generate image tag
+  run: |
+    IMAGE_TAG="${GITHUB_SHA:0:15}"  # 15자리 SHA 사용
+    echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+```
+
+**차이점:**
+- temp.yml: 7자리 SHA
+- ci-cd.yml: 15자리 SHA (더 높은 고유성)
+
+#### 2️⃣ Docker Hub 푸시 (재시도 로직)
+
+```yaml
+- name: Push to Docker Hub
+  run: |
+    MAX_RETRIES=3
+    RETRY_COUNT=0
+
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+      if docker push $IMAGE_NAME:$IMAGE_TAG; then
+        echo "Success!"
+        exit 0
+      else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+          sleep 5  # 5초 대기 후 재시도
+        fi
+      fi
+    done
+    exit 1
+```
+
+**특징:**
+- 네트워크 오류 시 자동 재시도
+- 5초 간격으로 최대 3회 재시도
+- 상세한 오류 로그 출력
+
+#### 3️⃣ Helm Values 업데이트 (yq 사용)
+
+```yaml
+- name: Install yq
+  run: |
+    sudo wget -qO /usr/local/bin/yq \
+      https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+    sudo chmod +x /usr/local/bin/yq
+
+- name: Update Helm values for dev environment
+  run: |
+    VALUES_FILE="helm/values/values-backend-dev.yaml"
+    yq eval ".image.tag = \"${IMAGE_TAG}\"" -i "$VALUES_FILE"
+```
+
+**장점:**
+- YAML 구조 보존
+- 안전한 값 업데이트
+- 환경별 개별 파일 관리
+
+#### 4️⃣ Git 푸시 (재시도 로직)
+
+```yaml
+- name: Commit and push Helm values changes
+  run: |
+    git add helm/values/values-backend-*.yaml
+    git commit -m "chore: update backend image tag to ${IMAGE_TAG}"
+
+    # 충돌 방지를 위한 pull
+    git pull --rebase origin ${{ github.ref_name }}
+
+    # 재시도 로직
+    MAX_RETRIES=3
+    RETRY_COUNT=0
+
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+      if git push origin ${{ github.ref_name }}; then
+        exit 0
+      else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+          git pull --rebase origin ${{ github.ref_name }}
+          sleep 2
+        fi
+      fi
+    done
+    exit 1
+```
+
+**특징:**
+- 충돌 방지를 위한 rebase pull
+- 푸시 실패 시 자동 재시도
+- 2초 간격으로 최대 3회 재시도
+
+#### 5️⃣ 빌드 요약
+
+```yaml
+- name: Build summary
+  if: success()
+  run: |
+    echo "✅ Build and Deployment Summary"
+    echo "Service: ${{ matrix.service }}"
+    echo "Image Tag: ${{ steps.image-tag.outputs.tag }}"
+    echo "Image URL: ${{ steps.push-dockerhub.outputs.image-url }}"
+
+- name: Build failure summary
+  if: failure()
+  run: |
+    echo "❌ Build and Deployment Failure Summary"
+    echo "Build Image Success: ${{ steps.build-image.outputs.success }}"
+    echo "Docker Hub Push Success: ${{ steps.push-dockerhub.outputs.success }}"
+    echo "Helm Update Dev Success: ${{ steps.update-dev.outputs.success }}"
+```
+
+**장점:**
+- 성공/실패 시 명확한 요약 제공
+- 각 단계별 성공 여부 표시
+- 문제 해결에 유용한 정보 제공
+
+### 필수 GitHub Secrets
+
+| Secret 이름 | 설명 |
+|------------|------|
+| `PAT_TOKEN` | 백엔드 저장소 접근용 PAT |
+| `DOCKERHUB_USERNAME` | Docker Hub 사용자 이름 |
+| `DOCKERHUB_TOKEN` | Docker Hub 액세스 토큰 |
+
+### 매트릭스 전략 확장
+
+현재는 backend만 포함되어 있지만, 쉽게 확장 가능합니다:
+
+```yaml
+strategy:
+  matrix:
+    service: [backend]
+    # 나중에 확장: service: [frontend, backend, worker]
+```
+
+**확장 예시:**
+```yaml
+strategy:
+  matrix:
+    service: [frontend, backend, worker]
+```
+
+이렇게 변경하면 세 서비스가 병렬로 빌드됩니다.
+
+### 전체 워크플로우 흐름 (ci-cd.yml)
+
+```
+코드 푸시 (main/develop 브랜치)
+  ↓
+매트릭스 전략으로 서비스별 병렬 실행
+  ↓
+백엔드 저장소 체크아웃
+  ↓
+Git SHA로 이미지 태그 생성 (15자리)
+  ↓
+Docker Hub 로그인
+  ↓
+Docker 이미지 빌드 (상세 로그)
+  ↓
+Docker Hub 푸시 (재시도 최대 3회, 5초 간격)
+  ↓
+yq 설치
+  ↓
+Helm values 업데이트 (dev/staging/prod)
+  ↓
+Git 설정
+  ↓
+변경사항 커밋
+  ↓
+최신 변경사항 Pull (rebase)
+  ↓
+Git 푸시 (재시도 최대 3회, 2초 간격)
+  ↓
+빌드 요약 출력 (성공/실패)
+  ↓
+ArgoCD 자동 감지 및 배포
+```
+
+### 두 워크플로우 사용 시나리오
+
+#### temp.yml 사용 시나리오
+
+- ✅ 빠른 프로토타이핑
+- ✅ 간단한 배포 파이프라인
+- ✅ 단일 환경 배포
+- ✅ 학습 목적
+
+#### ci-cd.yml 사용 시나리오
+
+- ✅ 프로덕션 환경
+- ✅ 다중 환경 관리 (dev/staging/prod)
+- ✅ 높은 안정성 요구
+- ✅ 여러 서비스 동시 배포
+- ✅ 네트워크 불안정 환경
+
+### 워크플로우 선택 가이드
+
+```
+프로젝트 단계에 따른 선택
+├─ 초기 개발 단계 → temp.yml
+├─ 테스트 단계 → ci-cd.yml (dev 환경)
+└─ 프로덕션 → ci-cd.yml (전체 환경)
+
+팀 크기에 따른 선택
+├─ 개인/소규모 팀 → temp.yml
+└─ 중대규모 팀 → ci-cd.yml
+
+환경 개수에 따른 선택
+├─ 단일 환경 → temp.yml
+└─ 다중 환경 → ci-cd.yml
+```
+
+### 고급 트러블슈팅
+
+#### 🔍 재시도 로직 디버깅
+
+Docker Hub 푸시 재시도 로그 확인:
+
+```bash
+# GitHub Actions 로그에서 확인
+# "Push attempt 1 of 3" 검색
+# 재시도 사유 및 네트워크 오류 확인
+```
+
+#### 🔍 Helm Values 업데이트 검증
+
+로컬에서 yq 명령어 테스트:
+
+```bash
+# yq 설치
+sudo wget -qO /usr/local/bin/yq \
+  https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+sudo chmod +x /usr/local/bin/yq
+
+# Helm values 업데이트 테스트
+yq eval ".image.tag = \"abc1234567890123\"" \
+  -i helm/values/values-backend-dev.yaml
+
+# 결과 확인
+cat helm/values/values-backend-dev.yaml
+```
+
+#### 🔍 Git 충돌 해결
+
+Git push 충돌 발생 시:
+
+```bash
+# 로컬에서 재현
+git pull --rebase origin main
+
+# 충돌 해결
+git rebase --continue
+
+# 푸시
+git push origin main
+```
+
+### 성능 최적화
+
+#### Docker 빌드 캐싱
+
+`.dockerignore` 파일 추가:
+
+```
+node_modules
+.git
+*.log
+.env
+```
+
+#### 병렬 빌드 활성화
+
+여러 서비스를 병렬로 빌드하려면 매트릭스 확장:
+
+```yaml
+strategy:
+  matrix:
+    service: [frontend, backend, worker]
+  max-parallel: 3  # 동시 실행 개수 제한
 ```
 
 ## 아키텍처
