@@ -16,6 +16,8 @@ spec:
     helm:
       valueFiles:
         - ../../values/values-backend-dev.yaml
+      # Submodule 초기화 비활성화
+      skipSubmodules: true
   
   destination:
     server: https://kubernetes.default.svc
@@ -27,6 +29,7 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - PruneLast=true
     retry:
       limit: 5
       backoff:
