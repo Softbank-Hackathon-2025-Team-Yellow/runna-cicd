@@ -19,7 +19,7 @@ jobs:
       - name: Checkout backend repo
         uses: actions/checkout@v4
         with:
-          repository: ORG_NAME/runna-backend      # ✅ 실제 org/repo 이름으로 변경
+          repository: Softbank-Hackathon-2025-Team-Yellow/runna-backend      # ✅ 실제 org/repo 이름으로 변경
           token: ${{ secrets.BACKEND_PAT }}       # ✅ repo 권한 있는 Classic PAT
           path: backend-repo                      # 이 폴더 아래에 백엔드 코드가 내려옴
 
