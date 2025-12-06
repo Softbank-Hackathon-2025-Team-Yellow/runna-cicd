@@ -92,14 +92,21 @@ env:
     value: "30"
   # Environment
   - name: ENVIRONMENT
-    value: "development"
+    value: "production"
   - name: DEBUG
     value: "true"
-  # AWS Configuration
-  - name: AWS_REGION
-    value: "REPLACE_WITH_REGION" # TODO: Get region from Sohyun
-  - name: S3_FUNCTIONS_BUCKET
-    value: "runna-functions" # TODO: Confirm actual bucket name
-  # K8s Configuration
+  # Kubernetes Configuration
+  - name: KUBERNETES_IN_CLUSTER
+    value: "true"
+  - name: BASE_DOMAIN
+    value: "runna.haifu.cloud"
   - name: K8S_NAMESPACE_PREFIX
     value: "tenant-"
+  # Runtime Images
+  - name: K8S_PYTHON_IMAGE
+    value: "docker.io/sbyellow/python-runtime:latest"
+  - name: K8S_NODEJS_IMAGE
+    value: "docker.io/sbyellow/node-runner:v1"
+  # Gateway API Configuration
+  - name: GATEWAY_NAME
+    value: "3scale-kourier-gateway"
