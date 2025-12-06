@@ -12,6 +12,10 @@ GitHub Actions (CI)
 Docker 빌드 → Docker Hub 푸시
   ↓
 Manifests 업데이트 → Git 커밋 및 푸시
+  ↓
+ArgoCD 감지 (GitOps)
+  ↓
+Kubernetes 배포
 ```
 
 ## 📁 프로젝트 구조
@@ -186,7 +190,11 @@ Manifests 저장소 클론
   ↓
 deployment.yaml 이미지 태그 업데이트
   ↓
-변경사항 Git 커밋 및 푸시 ✅ 완료
+변경사항 Git 커밋 및 푸시 ✅ temp.yml 완료
+  ↓
+ArgoCD가 변경 감지 (GitOps)
+  ↓
+Kubernetes에 자동 배포
 ```
 
 ### 워크플로우 실행 확인
