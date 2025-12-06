@@ -1,0 +1,9 @@
+# Feature modules will be placed here
+# Example structure:
+# features/
+#   user/
+#     hooks/
+#       useUserProfile.ts
+#     components/
+#       UserProfileCard.tsx
+#     index.ts
