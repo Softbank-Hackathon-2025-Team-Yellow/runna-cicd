@@ -27,12 +27,12 @@ Canary/Blue-Green 배포
 ├── .github/workflows/
 │   └── ci-cd.yml              # GitHub Actions CI/CD
 ```
-```
+
 코드 푸시 → GitHub Actions 빌드 → ECR 푸시 
 → Helm values 업데이트 → Git 커밋 
 → ArgoCD 감지 → K8s 배포 
 → Argo Rollouts (20% → 50% → 80% → 100%)
-```
+
 
 ## 아키텍처
 
