@@ -1,0 +1,95 @@
+name: Backend CI/CD (Docker + Manifests Update)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'services/backend/**'
+      - '.github/workflows/**'
+
+env:
+  REGISTRY: docker.io
+
+jobs:
+  build-push-and-update-manifests:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) 코드 체크아웃
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      # 2) Docker login
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 3) 이미지 태그 = SHA (앞 7자리)
+      - name: Set image tag from git SHA
+        id: meta
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # 4) Docker 이미지 빌드 + 푸시
+      - name: Build and push Docker image
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/backend
+          echo "Building image: $IMAGE_NAME:$IMAGE_TAG"
+
+          docker build \
+            -t $IMAGE_NAME:$IMAGE_TAG \
+            ./services/backend
+
+          docker push $IMAGE_NAME:$IMAGE_TAG
+
+      # 5) manifests repo 클론
+      - name: Clone manifests repo
+        run: |
+          git clone "${{ secrets.MANIFESTS_REPO_URL }}" manifests-repo
+          ls -R manifests-repo
+
+      # 6) deployment.yaml 에 이미지 태그 반영
+      - name: Update image tag in manifests
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          cd manifests-repo
+
+          TARGET_FILE="k8s/backend/deployment.yaml"
+
+          echo "Before:"
+          grep 'image:' "$TARGET_FILE" || true
+
+          # image 라인 교체 예시:
+          # 기존: image: docker.io/username/backend:xxxx
+          # 변경: image: docker.io/username/backend:${IMAGE_TAG}
+          sed -i "s|image: .*backend:.*|image: docker.io/${DOCKERHUB_USERNAME}/backend:${IMAGE_TAG}|g" "$TARGET_FILE"
+
+          echo "After:"
+          grep 'image:' "$TARGET_FILE" || true
+
+      # 7) 변경사항 커밋 + 푸시
+      - name: Commit and push manifests changes
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          cd manifests-repo
+
+          git config user.name  "${{ secrets.GIT_USER_NAME || 'github-actions[bot]' }}"
+          git config user.email "${{ secrets.GIT_USER_EMAIL || 'github-actions[bot]@users.noreply.github.com' }}"
+
+          if git status --porcelain | grep .; then
+            git add .
+            git commit -m "chore: update backend image to ${IMAGE_TAG}"
+            git push origin main
+          else
+            echo "No changes to commit"
+          fi
