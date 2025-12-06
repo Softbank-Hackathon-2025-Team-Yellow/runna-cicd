@@ -197,6 +197,66 @@ ArgoCD가 변경 감지 (GitOps)
 Kubernetes에 자동 배포
 ```
 
+### 워크플로우 실행 결과
+
+이 워크플로우를 실행하면 다음과 같은 결과를 얻게 됩니다:
+
+#### 1️⃣ Docker Hub에 새 이미지 생성
+- **위치**: `https://hub.docker.com/r/your-username/backend/tags`
+- **이미지 이름**: `your-username/backend:abc1234`
+- **태그**: Git SHA 앞 7자리 (예: `abc1234`)
+- **내용**: 최신 백엔드 코드가 빌드된 Docker 이미지
+
+#### 2️⃣ Manifests 저장소에 새 커밋 생성
+- **저장소**: Manifests 저장소 (`${{ secrets.MANIFESTS_REPO }}`)
+- **브랜치**: `main`
+- **커밋 메시지**: `chore: update backend image to abc1234`
+- **변경 파일**: `deployment.yaml`
+- **변경 내용**: 이미지 태그가 최신 SHA로 업데이트됨
+
+**변경 예시:**
+```yaml
+# 변경 전
+image: docker.io/username/backend:xyz5678
+
+# 변경 후
+image: docker.io/username/backend:abc1234
+```
+
+#### 3️⃣ ArgoCD가 변경 감지 및 자동 배포
+- ArgoCD가 Manifests 저장소의 변경사항을 자동으로 감지합니다
+- GitOps 패턴에 따라 Kubernetes 클러스터에 새 이미지를 배포합니다
+- 기존 백엔드 Pod가 종료되고 새 이미지로 Pod가 생성됩니다
+
+#### 4️⃣ Kubernetes 클러스터 상태
+- **Deployment**: 새 이미지로 업데이트됨
+- **Pod**: 새 버전(`abc1234`)으로 재시작됨
+- **서비스**: 다운타임 없이 새 버전으로 트래픽 전환
+- **상태**: 백엔드 서비스가 최신 코드로 실행 중
+
+**확인 명령어:**
+```bash
+# Pod 상태 확인
+kubectl get pods -n your-namespace
+
+# 이미지 태그 확인
+kubectl describe deployment backend -n your-namespace | grep Image
+
+# ArgoCD 동기화 상태 확인
+argocd app get your-app-name
+```
+
+#### 🎯 최종 결과
+
+**코드 변경 → 자동 배포 완료**
+- ✅ 최신 백엔드 코드가 Docker 이미지로 빌드됨
+- ✅ Docker Hub에 이미지 저장됨
+- ✅ Manifests가 자동으로 업데이트됨
+- ✅ Kubernetes에 자동으로 배포됨
+- ✅ 백엔드 서비스가 새 버전으로 실행 중
+
+**전체 소요 시간**: 약 3-5분 (코드 푸시 → 배포 완료)
+
 ### 워크플로우 실행 확인
 
 1. **GitHub Actions 페이지 접속**
