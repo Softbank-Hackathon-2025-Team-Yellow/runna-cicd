@@ -26,7 +26,7 @@ Canary/Blue-Green 배포
 .
 ├── .github/workflows/
 │   └── ci-cd.yml              # GitHub Actions CI/CD
-
+```
 ```
 코드 푸시 → GitHub Actions 빌드 → ECR 푸시 
 → Helm values 업데이트 → Git 커밋 
