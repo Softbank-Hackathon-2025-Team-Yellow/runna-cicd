@@ -1,3 +1,7 @@
 [submodule "backend-repo"]
 	path = backend-repo
 	url = https://github.com/Softbank-Hackathon-2025-Team-Yellow/runna-backend.git
+
+[submodule "frontend-repo"]
+	path = frontend-repo
+	url = https://github.com/Softbank-Hackathon-2025-Team-Yellow/runna-client.git

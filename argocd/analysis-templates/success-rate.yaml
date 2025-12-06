@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   name: success-rate
-  namespace: argocd
+  namespace: observability
 spec:
   metrics:
     # 성공률 메트릭 - 에러율 5% 이하 유지

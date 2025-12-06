@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: backend-prod
-  namespace: argocd
+  namespace: observability
   labels:
     environment: production
     service: backend

@@ -2,18 +2,18 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: serverless-platform
-  namespace: argocd
+  namespace: observability
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/team/serverless-platform
+    repoURL: https://github.com/Softbank-Hackathon-2025-Team-Yellow/runna-cicd
     targetRevision: main
     path: argocd/applications
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: observability
   syncPolicy:
     automated:
       prune: true
