@@ -56,7 +56,7 @@ jobs:
       # 5) manifests repo 클론
       - name: Clone manifests repo
         run: |
-          git clone "${{ secrets.MANIFESTS_REPO_URL }}" manifests-repo
+          git clone "https://${{ secrets.CLASSIC_PAT }}@github.com/${{ secrets.MANIFESTS_REPO }}.git" manifests-repo
           ls -R manifests-repo
 
       # 6) deployment.yaml 에 이미지 태그 반영
