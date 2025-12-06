@@ -67,7 +67,7 @@ jobs:
         run: |
           cd manifests-repo
 
-          TARGET_FILE="k8s/backend/deployment.yaml"
+          TARGET_FILE="deployment.yaml"
 
           echo "Before:"
           grep 'image:' "$TARGET_FILE" || true
