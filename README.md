@@ -9,9 +9,9 @@
   ↓
 GitHub Actions (CI)
   ↓
-Docker 빌드 → ECR 푸시
+Docker 빌드 → Docker Hub 푸시
   ↓
-Helm values 업데이트 → Git 커밋
+Manifests 업데이트 → Git 커밋
   ↓
 ArgoCD 감지 (GitOps)
   ↓
@@ -290,8 +290,8 @@ git diff deployment.yaml
 ┌─────────────────────────────────────┐
 │     GitHub Actions (CI)             │
 │  - Docker 빌드                      │
-│  - ECR 푸시                         │
-│  - Helm values 업데이트             │
+│  - Docker Hub 푸시                  │
+│  - Manifests 업데이트               │
 └──────┬──────────────────────────────┘
        │
        ▼
@@ -320,11 +320,10 @@ git diff deployment.yaml
 ## 기술 스택
 
 - **CI**: GitHub Actions
-- **컨테이너**: Docker + Amazon ECR
-- **패키징**: Helm Charts
+- **컨테이너**: Docker + Docker Hub
 - **배포**: ArgoCD (GitOps)
 - **점진적 배포**: Argo Rollouts
-- **인프라**: Kubernetes (EKS)
+- **인프라**: Kubernetes
 - **모니터링**: Prometheus + Grafana (별도 담당)
 
 ## 프로젝트 구조
@@ -388,10 +387,9 @@ git diff deployment.yaml
 
 - Docker
 - kubectl
-- helm (v3+)
 - argocd CLI
-- AWS CLI (ECR 접근용)
 - GitHub 계정
+- Docker Hub 계정
 
 ### 로컬 개발 환경 설정
 
@@ -541,20 +539,6 @@ kubectl argo rollouts undo backend -n production
 자세한 내용은 `docs/argo-rollouts-config.md`를 참조하세요.
 
 ## 환경 설정
-
-### GitHub Secrets 설정
-
-다음 secrets를 GitHub 저장소에 추가해야 합니다:
-
-- `AWS_ROLE_ARN`: AWS IAM Role ARN (OIDC 인증용)
-- `AWS_REGION`: AWS 리전 (예: us-east-1)
-- `ECR_REGISTRY`: ECR 레지스트리 URL
-
-### AWS IAM Role 설정
-
-GitHub Actions에서 사용할 IAM Role을 생성하고 OIDC 신뢰 관계를 설정합니다.
-
-자세한 내용은 `docs/aws-setup.md`를 참조하세요.
 
 ### ArgoCD 설정
 
